@@ -16,11 +16,12 @@
 import math
 import random
 import time
+import sys
 from xml.dom import minidom
 from PIL import Image, ImageDraw
 
-xRes = 64
-yRes = 48
+xRes = 640
+yRes = 480
 
 PI180 = 0.0174532925
 
@@ -41,17 +42,20 @@ class Outs:
 
 	def drawPixelRGB(self,x,y,r,g,b):
 		color = "#"
-		mapping = ['0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f']
-		color += mapping[r/16]
-		color += mapping[r%16]
-		color += mapping[g/16]
-		color += mapping[g%16]
-		color += mapping[b/16]
-		color += mapping[b%16]
+#		mapping = ['0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f']
+#		color += mapping[int(r/16)]
+#		color += mapping[int(r%16)]
+#		color += mapping[int(g/16)]
+#		color += mapping[int(g%16)]
+#		color += mapping[int(b/16)]
+#		color += mapping[int(b%16)]
+		
+		color = "#{0:02x}{1:02x}{2:02x}".format(int(r*255),int(g*255),int(b*255))
+#		print(color)
 		self.draw.point((x,y),color)
 
 	def drawPixelColor(self,x,y,color):
-		self.drawPixelRGB(x,y,color.x,color.y,color.z)
+		self.drawPixelRGB(x,y,color.r,color.g,color.b)
 
 	def drawPixelHash(self,x,y,val):
 		self.draw.point((x,y),val)
@@ -162,6 +166,7 @@ class Triangle:
 class Sphere:
 	def __init__(self,center,radius,color,reflectivity,transparency):
 		self.center = center
+		self.position = center
 		self.radius = radius
 		self.color = color
 		self.reflectivity = reflectivity
@@ -171,13 +176,13 @@ class Sphere:
 		m = ray.o - self.center
 		b = m.dot(ray.d)
 		c = m.dot(m) - (self.radius * self.radius)
-#		print(m,b,c)
+
 		
 		#Exit if r's origin outside of the sphere (c > 0) and ray is pointing away from sphere (b > 0)
 		if c > 0 and b > 0:
 			return 0
-#		print(1)
 		discr = b*b - c
+#		print(discr,m,b,c)
 		
 		#a negative discriminant corresponds to ray missing sphere
 		if discr < 0:
@@ -189,7 +194,6 @@ class Sphere:
 		#if t is negative, ray started inside sphere so clamp t to zero
 		if (t < 0):
 			t = 0
-#		print(3)
 		q = ray.o + ray.d * t
 		return (t,q)
 
@@ -210,96 +214,20 @@ class Ray:
 	def lineSeg(self,length):
 		return LineSegment(self.o,self.o + self.d*(length*1.0))
 
-class Intersection:
-	def __init__(self,depth,point,plane):
-		self.depth = depth
-		self.point = point
-		self.plane = plane
-
-class Camera:
-	def __init__(self,loc,direction,clipNear,clipFar,FOV,sizeX,sizeY,name):
-		self.loc = loc
-		self.d = direction
-		self.cn = clipNear
-		self.cf = clipFar
-		self.fov = FOV
-		self.x = sizeX
-		self.y = sizeY
-		self.aspect = sizeY/(sizeX*1.0)
-		self.name = name
-		self.outs = Outs(name,sizeX,sizeY,"BMP",True)
-		self.xspan = math.tan((FOV/2*PI180))*clipNear*2
-		self.yspan = self.xspan*self.aspect
-		self.xpitch = self.xspan/sizeX
-		self.ypitch = self.yspan/sizeY
-
-	def draw(self,world):
-		tstart = time.time()
-		xguide = Point(0,1,0).cross(self.d)
-		yguide = self.d.cross(xguide)
-		xguide.normalize()
-		yguide.normalize()
-		#print "xguide:", str(xguide)
-		#print "yguide:", str(yguide)
-		rayplane = self.loc + self.d * self.cn
-		start = rayplane - xguide * (self.xspan/2)
-		start = start - yguide * (self.yspan/2)
-		pstart = time.time()
-		
-		for x in range(self.x):
-			tempx = (self.xpitch * x) + self.xpitch/2
-			print (x*100.0)/self.x,"percent complete, row took:",time.time()-pstart
-			pstart = time.time()
-			for y in range(self.y):
-				tempy = (self.ypitch * y) + self.ypitch/2
-				castpoint = start + xguide * tempx + yguide * tempy
-#				print "cast point is:", str(castpoint)
-#				print castpoint.x,',',castpoint.y
-				castdir = castpoint - self.loc
-				castdir.normalize()
-				castRay = Ray(self.loc,castdir)
-				intersects = []
-				for tri in world:
-					col = tri.RayCollides(castRay,self.cf)
-					if col:
-						intersects.append(col)
-				if len(intersects) == 0:
-					self.outs.drawPixelRGB(x,y,0,0,0)
-				else:
-					self.outs.drawPixelRGB(x,y,255,255,255)
-		self.outs.save()
-		print "job took:", time.time()-tstart
-
 class Color:
 	def __init__(self,r,g,b,a=1):
 		self.r = r
 		self.g = g
 		self.b = b
 		self.a = a
-
-class Mesh:
-	def __init__(self):
-		self.verts = []
-		self.faces = []
-
-	def addVert(self,vert):
-		self.verts.append(vert)
-
-	def addFace(self,a,b,c):
-		self.faces.append(Triangle(self.verts[a],self.verts[b],self.verts[c]))
+	
+	def __repr__(self):
+		return "{},{},{}".format(self.r,self.g,self.b)
 
 class Light:
 	def __init__(self,position,color):
 		self.position = position
 		self.color = color
-
-def drawRandom(x, y, outs):
-	outs.drawPixelRGB(x,y,random.randint(0,15)*16,random.randint(0,15)*16,random.randint(0,15)*16)
-
-def drawWorld(outs,function):
-	for i in range(outs.img.size[0]):
-		for j in range(outs.img.size[1]):
-			function(i,j,outs)
 
 def scalarTriple(a,b,c):
 	return a.cross(b).dot(c)
@@ -331,25 +259,92 @@ def IntersectLineTriangle(x,y,a,b,c):
 	return p
 
 
-#A = Point( 00, 00,-1000.0)
-#B = Point( 00, 00, 1000.0)
-#R = LineSegment(A,B)
-#P1= Point( 0,  1, 0)
-#P2= Point( 1, -1, 0)
-#P3= Point(-1, -1, 0)
-#P = Triangle(P1,P2,P3)
-##s = Sphere(Point(0,0,0),1)
-#p = Point(10,0,0)
-#d = Point(-1,0,0)
+def render(objects,lights):
+	width = xRes
+	height = yRes
+	image = Outs("Render",xRes,yRes,"BMP",True)
+
+	invWidth = 1.0 / width
+	invHeight = 1.0 / height
+	fov = 30
+	aspectratio = width / float(height)
+	angle = math.tan(math.pi * 0.5 * fov / 180.0);
+	# Trace Rays
+	for y in range(height):
+		for x in range(width):
+			print_status(x,y,width,height)
+			xx = (2 * ((x + 0.5) * invWidth) - 1) * angle * aspectratio
+			yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle
+			#print("xx: {}\t yy:{}".format(xx,yy))
+			ray = Ray(Point(0,0,0),Point(xx, yy, -1))
+			image.drawPixelColor(x,y,trace(ray, spheres, lights, 0))
+	image.save()
+
+def print_status(x,y,width,height):
+	total = width*height
+	pos = 100.0 * y * height + x
+	sys.stdout.write("Progress {}%\r".format(int(pos/total)))
+	sys.stdout.flush()
+
+def trace(ray,objects,lights,depth):
+	min_distance = float("inf")
+	collidee = None
+	collision_point = None
+	for obj in objects:
+		result = obj.RayCollides(ray)
+		if result != 0:
+			distance = result[0]
+			if distance < min_distance:
+				collidee = obj
+				collision_point = result[1]
+				min_distance = distance
+
+	if not collidee:
+		return Color(0,0,0) #no collisions, return black
+#	else:
+#		return collidee.color
+	
+	light = lights[0]
+#	shadow_ray = Ray(collision_point,light.position - collision_point)
+#	min_distance = get_distance(shadow_ray.o,light.position)
+#	isShadow = False
+#	for obj in objects:
+#		result = obj.RayCollides(shadow_ray)
+#		if result != 0:
+#			if result[0] < min_distance:
+#				isShadow = True
+#				print("Shadow found!\n")
+#				break
+
+	transmission = Point(1,1,1)
+	bias = 1e-4
+	collision_normal = collision_point - obj.position
+	lightDirection = light.position - collision_point
+	lightDirection.normalize()
+	rayPosition = collision_point + collision_normal * bias
+	isShadow = False
+	for obj in objects:
+		result = obj.RayCollides(Ray(rayPosition,lightDirection))
+		if result != 0:
+			isShadow = True
+			break
+			
+	if isShadow:
+		return Color(0,0,0)
+	else:
+		return collidee.color
+
+def get_distance(p1,p2):
+	distance = math.sqrt((p1.x-p2.x)**2+(p1.y-p2.x)**2+(p1.z-p2.z)**2)
 
 spheres = []
 spheres.append(Sphere(Point(0.0,-10004,-20),10000,Color(0.2,0.2,0.2),0,0))
-spheres.append(Sphere(Point(0.0,0,-20)4,Color(1.0,0.32,0.36),1,0.5))
+spheres.append(Sphere(Point(0.0,0,-20),4,Color(1.0,0.32,0.36),1,0.5))
 spheres.append(Sphere(Point(5.0,-1,-15),2,Color(0.9,0.76,0.46), 1, 0.0))
 spheres.append(Sphere(Point(5.0, 0, -25), 3, Color(0.65, 0.77, 0.97), 1, 0.0))
 spheres.append(Sphere(Point(-5.5,0,-15), 3, Color(0.9,0.9,0.9),1,0))
+#spheres.append(Sphere(Point(0,0,-15), 3, Color(0.9,0.0,0.9),1,0))
 
 light = Light(Point( 0.0, 20, -30), Color(0.00, 0.00, 0.00));
-c = Camera(Point(0,0,2),Point(0,0,-1),.1,10000,90,xRes,yRes,"dotanuki out")
-#c.draw(loadObj('','level.obj'))
-c.draw([s])
+
+render(spheres,[light])
