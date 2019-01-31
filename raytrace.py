@@ -22,7 +22,7 @@ from PIL import Image, ImageDraw
 
 xRes = 640
 yRes = 480
-MAX_RAY_DEPTH = 4
+MAX_RAY_DEPTH = 3
 
 PI180 = 0.0174532925
 
@@ -297,7 +297,7 @@ def trace(ray,objects,lights,depth):
 				min_distance = distance
 
 	if not collidee:
-		return Color(0,0,0) #no collisions, return black
+		return Color(1,1,1) #no collisions, return backgrond
 	
 	collision_normal = collision_point - obj.position
 	collision_normal.normalize()
@@ -307,8 +307,8 @@ def trace(ray,objects,lights,depth):
 		collision_normal = collision_normal * (-1.0)
 		inside = False
 
-#	if (collidee.transparency > 0 or collidee.reflectivity > 0) and depth < MAX_RAY_DEPTH:
-	if False:
+	if (collidee.transparency > 0 or collidee.reflectivity > 0) and depth < MAX_RAY_DEPTH:
+#	if False:
 		facingratio = ray.d.dot(collision_normal) * (-1.0)
 		# change the mix value to tweak the effect
 		fresneleffect = mix(math.pow(1 - facingratio, 3), 1, 0.1)
@@ -333,7 +333,8 @@ def trace(ray,objects,lights,depth):
 
 		#the result is a mix of reflection and refraction (if the sphere is transparent)
 		flec = reflection * fresneleffect
-		frac = refraction * (1 - fresneleffect) * collidee.transparency
+		#frac = refraction * (1 - fresneleffect) * collidee.transparency
+		frac = refraction * (1 - fresneleffect)
 		both = flec + frac
 		return both
 
@@ -343,16 +344,19 @@ def trace(ray,objects,lights,depth):
 		lightDirection = light.position - collision_point
 		lightDirection.normalize()
 		rayPosition = collision_point + collision_normal * bias
+#		rayPosition = collision_point + collision_normal
 		isShadow = False
 		for obj in objects:
+			if obj == collidee:
+				continue
 			result = obj.RayCollides(Ray(rayPosition,lightDirection))
 			if result != 0:
 				isShadow = True
 				break
 				
 		if isShadow:
-	#		return Color(0,0,0)
-			return collidee.color
+#			return Color(0,0,0)
+			return collidee.color * 0.1
 		else:
 			return collidee.color
 
@@ -369,9 +373,10 @@ spheres.append(Sphere(Point(0.0,0,-20),4,Color(1.0,0.32,0.36),1,0.5))
 spheres.append(Sphere(Point(5.0,-1,-15),2,Color(0.9,0.76,0.46), 1, 0.0))
 spheres.append(Sphere(Point(5.0, 0, -25), 3, Color(0.65, 0.77, 0.97), 1, 0.0))
 spheres.append(Sphere(Point(-5.5,0,-15), 3, Color(0.9,0.9,0.9),1,0))
-#spheres.append(Sphere(Point(0,0,-15), 3, Color(0.9,0.0,0.9),1,0))
+spheres.append(Sphere(Point(0,0,-15), 3, Color(0.9,0.0,0.9),1,0))
 
 light = Light(Point( 0.0, 20, -30), Color(0.00, 0.00, 0.00));
+#light = Light(Point( 0.0, 20, 0), Color(0.00, 0.00, 0.00));
 
 render(spheres,[light])
 print
