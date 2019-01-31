@@ -20,8 +20,9 @@ import sys
 from xml.dom import minidom
 from PIL import Image, ImageDraw
 
-xRes = 640
-yRes = 480
+xRes = 64
+yRes = 48
+MAX_RAY_DEPTH = 2
 
 PI180 = 0.0174532925
 
@@ -51,11 +52,14 @@ class Outs:
 #		color += mapping[int(b%16)]
 		
 		color = "#{0:02x}{1:02x}{2:02x}".format(int(r*255),int(g*255),int(b*255))
-#		print(color)
+		print(r,g,b)
+#		color = color.replace("-","0")
+		print(color)
 		self.draw.point((x,y),color)
 
 	def drawPixelColor(self,x,y,color):
-		self.drawPixelRGB(x,y,color.r,color.g,color.b)
+		#self.drawPixelRGB(x,y,color.r,color.g,color.b)
+		self.drawPixelRGB(x,y,color.x,color.y,color.z)
 
 	def drawPixelHash(self,x,y,val):
 		self.draw.point((x,y),val)
@@ -68,8 +72,11 @@ class Outs:
 			self.img.save(self.name + "." + self.ext,self.ext)
 
 #####	Geometric Objects	###################################################################
-class Point:
+class Vector:
 	def __init__(self,x,y,z,w=1):
+		if not (isinstance(x,float) or isinstance(x,int)):
+			message = "recieved wrong type: ".format(str(x))
+			raise TypeError(message)
 		self.x = x * 1.0
 		self.y = y * 1.0
 		self.z = z * 1.0
@@ -92,6 +99,8 @@ class Point:
 		return Point(x,y,z,w)
 
 	def __mul__(self,val):
+#		print(type(self),type(val))
+#		print(self,val)
 		x = val * self.x
 		y = val * self.y
 		z = val * self.z
@@ -133,8 +142,11 @@ class Point:
 			self.z /= self.w
 			self.w = 1
 
-	def __str__(self):
+	def __repr__(self):
 		return "x: " + str(self.x) + " y: " + str(self.y) + " z: " + str(self.z) + " w: " + str(self.w)
+
+class Point(Vector):
+	pass
 
 class Triangle:
 	def __init__(self,A,B,C):
@@ -214,15 +226,15 @@ class Ray:
 	def lineSeg(self,length):
 		return LineSegment(self.o,self.o + self.d*(length*1.0))
 
-class Color:
+class Color(Vector):
 	def __init__(self,r,g,b,a=1):
-		self.r = r
-		self.g = g
-		self.b = b
-		self.a = a
+		self.x = r
+		self.y = g
+		self.z = b
+		self.w = a
 	
 	def __repr__(self):
-		return "{},{},{}".format(self.r,self.g,self.b)
+		return "{},{},{}".format(self.x,self.y,self.z)
 
 class Light:
 	def __init__(self,position,color):
@@ -301,38 +313,68 @@ def trace(ray,objects,lights,depth):
 
 	if not collidee:
 		return Color(0,0,0) #no collisions, return black
-#	else:
-#		return collidee.color
 	
-	light = lights[0]
-#	shadow_ray = Ray(collision_point,light.position - collision_point)
-#	min_distance = get_distance(shadow_ray.o,light.position)
-#	isShadow = False
-#	for obj in objects:
-#		result = obj.RayCollides(shadow_ray)
-#		if result != 0:
-#			if result[0] < min_distance:
-#				isShadow = True
-#				print("Shadow found!\n")
-#				break
-
-	transmission = Point(1,1,1)
-	bias = 1e-4
 	collision_normal = collision_point - obj.position
-	lightDirection = light.position - collision_point
-	lightDirection.normalize()
-	rayPosition = collision_point + collision_normal * bias
-	isShadow = False
-	for obj in objects:
-		result = obj.RayCollides(Ray(rayPosition,lightDirection))
-		if result != 0:
-			isShadow = True
-			break
-			
-	if isShadow:
-		return Color(0,0,0)
+	collision_normal.normalize()
+	bias = 1e-4
+	inside = False
+	if ray.d.dot(collision_normal) > 0:
+		collision_normal = collision_normal * (-1.0)
+		inside = False
+
+	if (collidee.transparency > 0 or collidee.reflectivity > 0) and depth < MAX_RAY_DEPTH:
+		facingratio = ray.d.dot(collision_normal) * (-1.0)
+		# change the mix value to tweak the effect
+		fresneleffect = mix(math.pow(1 - facingratio, 3), 1, 0.1)
+		# compute reflection direction (not need to normalize because all vectors
+		# are already normalized)
+		refldir = ray.d - collision_normal * 2 * ray.d.dot(collision_normal)
+		refldir.normalize()
+		reflray = Ray(collision_point + collision_normal * bias,refldir)
+		reflection = trace(reflray, objects,lights, depth + 1)
+		
+		refraction = Point(0,0,0)
+		# if the sphere is also transparent compute refraction ray (transmission)
+		if collidee.transparency:
+			ior = 1.1
+			eta = ior if inside else 1 # are we inside or outside the surface?
+			cosi = 0 - collision_normal.dot(ray.d)
+			k = 1 - eta * eta * (1 - cosi * cosi)
+			refrdir = ray.d * eta + collision_normal * (eta * cosi - math.sqrt(k))
+			refrdir.normalize()
+			refrray = Ray(collision_point + collision_normal * bias,refrdir)
+			refraction = trace(refrray, objects, lights, depth + 1)
+
+		#the result is a mix of reflection and refraction (if the sphere is transparent)
+		ref = reflection * fresneleffect
+		frac = refraction * (1 - fresneleffect)
+		col = collidee.color * collidee.transparency
+#		print("types pre addition: ", ref,frac)
+		surfaceColor = ref + frac
+#		print(surfaceColor,col)
+		surfaceColor = surfaceColor.cross(col)
+		print(surfaceColor)
+		return surfaceColor
 	else:
-		return collidee.color
+		light = lights[0]
+		collision_normal = collision_point - obj.position
+		lightDirection = light.position - collision_point
+		lightDirection.normalize()
+		rayPosition = collision_point + collision_normal * bias
+		isShadow = False
+		for obj in objects:
+			result = obj.RayCollides(Ray(rayPosition,lightDirection))
+			if result != 0:
+				isShadow = True
+				break
+				
+		if isShadow:
+			return Color(0,0,0)
+		else:
+			return collidee.color
+
+def mix(a,b,mix):
+	return b * mix + a * (1 - mix)
 
 def get_distance(p1,p2):
 	distance = math.sqrt((p1.x-p2.x)**2+(p1.y-p2.x)**2+(p1.z-p2.z)**2)
@@ -348,3 +390,4 @@ spheres.append(Sphere(Point(-5.5,0,-15), 3, Color(0.9,0.9,0.9),1,0))
 light = Light(Point( 0.0, 20, -30), Color(0.00, 0.00, 0.00));
 
 render(spheres,[light])
+print
