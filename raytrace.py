@@ -20,9 +20,9 @@ import sys
 from xml.dom import minidom
 from PIL import Image, ImageDraw
 
-xRes = 64
-yRes = 48
-MAX_RAY_DEPTH = 2
+xRes = 640
+yRes = 480
+MAX_RAY_DEPTH = 4
 
 PI180 = 0.0174532925
 
@@ -42,19 +42,8 @@ class Outs:
 			self.count = -1
 
 	def drawPixelRGB(self,x,y,r,g,b):
-		color = "#"
-#		mapping = ['0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f']
-#		color += mapping[int(r/16)]
-#		color += mapping[int(r%16)]
-#		color += mapping[int(g/16)]
-#		color += mapping[int(g%16)]
-#		color += mapping[int(b/16)]
-#		color += mapping[int(b%16)]
-		
 		color = "#{0:02x}{1:02x}{2:02x}".format(int(r*255),int(g*255),int(b*255))
-		print(r,g,b)
-#		color = color.replace("-","0")
-		print(color)
+#		if color != '#000000': print color
 		self.draw.point((x,y),color)
 
 	def drawPixelColor(self,x,y,color):
@@ -99,8 +88,6 @@ class Vector:
 		return Point(x,y,z,w)
 
 	def __mul__(self,val):
-#		print(type(self),type(val))
-#		print(self,val)
 		x = val * self.x
 		y = val * self.y
 		z = val * self.z
@@ -194,12 +181,12 @@ class Sphere:
 		if c > 0 and b > 0:
 			return 0
 		discr = b*b - c
-#		print(discr,m,b,c)
+
 		
 		#a negative discriminant corresponds to ray missing sphere
 		if discr < 0:
 			return 0
-#		print(2)
+
 		# Ray now found to intersect sphere, compute smallest t value of intersection
 		t = -b - math.sqrt(discr)
 
@@ -256,7 +243,6 @@ def IntersectLineTriangle(x,y,a,b,c):
 	if not(t >= 0 and t <= 1): return None
 
 	p = x + (xy * t)
-#	print t,"with",str(p)
 	a -= p
 	b -= p
 	c -= p
@@ -287,14 +273,13 @@ def render(objects,lights):
 			print_status(x,y,width,height)
 			xx = (2 * ((x + 0.5) * invWidth) - 1) * angle * aspectratio
 			yy = (1 - 2 * ((y + 0.5) * invHeight)) * angle
-			#print("xx: {}\t yy:{}".format(xx,yy))
 			ray = Ray(Point(0,0,0),Point(xx, yy, -1))
 			image.drawPixelColor(x,y,trace(ray, spheres, lights, 0))
 	image.save()
 
 def print_status(x,y,width,height):
 	total = width*height
-	pos = 100.0 * y * height + x
+	pos = 100.0 * y * width + x
 	sys.stdout.write("Progress {}%\r".format(int(pos/total)))
 	sys.stdout.flush()
 
@@ -322,7 +307,8 @@ def trace(ray,objects,lights,depth):
 		collision_normal = collision_normal * (-1.0)
 		inside = False
 
-	if (collidee.transparency > 0 or collidee.reflectivity > 0) and depth < MAX_RAY_DEPTH:
+#	if (collidee.transparency > 0 or collidee.reflectivity > 0) and depth < MAX_RAY_DEPTH:
+	if False:
 		facingratio = ray.d.dot(collision_normal) * (-1.0)
 		# change the mix value to tweak the effect
 		fresneleffect = mix(math.pow(1 - facingratio, 3), 1, 0.1)
@@ -346,15 +332,11 @@ def trace(ray,objects,lights,depth):
 			refraction = trace(refrray, objects, lights, depth + 1)
 
 		#the result is a mix of reflection and refraction (if the sphere is transparent)
-		ref = reflection * fresneleffect
-		frac = refraction * (1 - fresneleffect)
-		col = collidee.color * collidee.transparency
-#		print("types pre addition: ", ref,frac)
-		surfaceColor = ref + frac
-#		print(surfaceColor,col)
-		surfaceColor = surfaceColor.cross(col)
-		print(surfaceColor)
-		return surfaceColor
+		flec = reflection * fresneleffect
+		frac = refraction * (1 - fresneleffect) * collidee.transparency
+		both = flec + frac
+		return both
+
 	else:
 		light = lights[0]
 		collision_normal = collision_point - obj.position
@@ -369,7 +351,8 @@ def trace(ray,objects,lights,depth):
 				break
 				
 		if isShadow:
-			return Color(0,0,0)
+	#		return Color(0,0,0)
+			return collidee.color
 		else:
 			return collidee.color
 
@@ -380,6 +363,7 @@ def get_distance(p1,p2):
 	distance = math.sqrt((p1.x-p2.x)**2+(p1.y-p2.x)**2+(p1.z-p2.z)**2)
 
 spheres = []
+#position, radius, surface color, reflectivity, transparency,
 spheres.append(Sphere(Point(0.0,-10004,-20),10000,Color(0.2,0.2,0.2),0,0))
 spheres.append(Sphere(Point(0.0,0,-20),4,Color(1.0,0.32,0.36),1,0.5))
 spheres.append(Sphere(Point(5.0,-1,-15),2,Color(0.9,0.76,0.46), 1, 0.0))
