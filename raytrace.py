@@ -94,6 +94,13 @@ class Vector:
 		w = self.w
 		return Point(x,y,z,w)
 	
+	def vector_mul(self,val):
+		x = val.x * self.x
+		y = val.y * self.y
+		z = val.z * self.z
+		w = self.w
+		return Vector(x,y,z,w)
+	
 	def mag2(self):
 		return self.x**2 + self.y**2 + self.z**2		
 
@@ -337,6 +344,8 @@ def trace(ray,objects,lights,depth):
 		frac = refraction * (1 - fresneleffect)
 		both = flec + frac
 		return both
+		surfaceColor = both.vector_mul(collidee.color)
+		return surfaceColor
 
 	else:
 		light = lights[0]
@@ -355,8 +364,8 @@ def trace(ray,objects,lights,depth):
 				break
 				
 		if isShadow:
-#			return Color(0,0,0)
-			return collidee.color * 0.1
+			return Color(0,0,0)
+#			return collidee.color * 0.1
 		else:
 			return collidee.color
 
